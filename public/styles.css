@@ -234,12 +234,7 @@ body {
 }
 
 .preview-hint {
-  margin: 0;
-  padding: 9px 14px;
-  font-size: 0.82rem;
-  color: #694f19;
-  background: #fff4cc;
-  border-bottom: 1px solid rgba(102, 79, 56, 0.15);
+  display: none !important;
 }
 
 .preview-hint strong {
