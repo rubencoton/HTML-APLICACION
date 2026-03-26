@@ -6,6 +6,16 @@ Proyecto corporativo para **ARTES BUHO**.
 Desarrollador: **RUBEN COTON**.
 Paleta corporativa aplicada: **rojo, amarillo y blanco**.
 
+## Acceso publico
+
+Version web publica (sin login para visitantes):
+
+- [https://rubencoton.github.io/HTML-APLICACION/](https://rubencoton.github.io/HTML-APLICACION/)
+
+Nota:
+- En la version publicada, la IA usa backend local si existe.
+- Si no hay backend, puedes usar el boton `Configurar API IA` para usar tu propia API key desde navegador.
+
 Incluye:
 
 - Chat IA para pedir cambios directos sobre el email.

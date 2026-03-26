@@ -1,5 +1,7 @@
 const STORAGE_KEY = "html-aplicacion-draft-v1";
 const CHAT_STORAGE_KEY = "html-aplicacion-chat-v1";
+const BROWSER_API_KEY_STORAGE = "ha-browser-openai-key";
+const BROWSER_MODEL_STORAGE = "ha-browser-openai-model";
 const PREVIEW_HELP_TEXT =
   "Vista previa interactiva: haz clic en texto, enlace o imagen para editar.";
 const PREVIEW_STYLE_ID = "ha-preview-edit-style";
@@ -74,6 +76,7 @@ const newDraftBtn = document.getElementById("newDraftBtn");
 const copyBtn = document.getElementById("copyBtn");
 const exportHtmlBtn = document.getElementById("exportHtmlBtn");
 const exportTxtBtn = document.getElementById("exportTxtBtn");
+const setApiKeyBtn = document.getElementById("setApiKeyBtn");
 
 init();
 
@@ -170,6 +173,10 @@ function wireEvents() {
     const txt = htmlToText(state.html);
     downloadFile("email.txt", txt, "text/plain;charset=utf-8");
   });
+
+  setApiKeyBtn.addEventListener("click", () => {
+    configureBrowserAiCredentials();
+  });
 }
 
 async function applyAiInstruction(instruction) {
@@ -178,20 +185,11 @@ async function applyAiInstruction(instruction) {
   addMessage("assistant", "Procesando cambio...");
 
   try {
-    const response = await fetch("/api/ai/revise", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        instruction,
-        html: state.html,
-        history: state.chatHistory.slice(-12),
-      }),
+    const payload = await requestAiRevision({
+      instruction,
+      html: state.html,
+      history: state.chatHistory.slice(-12),
     });
-
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "No se pudo aplicar la revision.");
-    }
 
     if (payload.updatedHtml) {
       state.html = payload.updatedHtml;
@@ -218,9 +216,239 @@ async function applyAiInstruction(instruction) {
   }
 }
 
+async function requestAiRevision({ instruction, html, history }) {
+  let localError = null;
+
+  try {
+    return await requestAiRevisionViaLocalApi({ instruction, html, history });
+  } catch (error) {
+    localError = error;
+  }
+
+  const browserPayload = await tryBrowserDirectRevision({ instruction, html, history });
+  if (browserPayload) {
+    return browserPayload;
+  }
+
+  if (!isLocalHost()) {
+    throw new Error(
+      "La version publicada no tiene backend IA. Pulsa 'Configurar API IA' para usar tu clave en navegador."
+    );
+  }
+
+  throw localError || new Error("No se pudo aplicar la revision.");
+}
+
+async function requestAiRevisionViaLocalApi({ instruction, html, history }) {
+  const response = await fetch("/api/ai/revise", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instruction,
+      html,
+      history,
+    }),
+  });
+
+  const raw = await response.text();
+  const payload = safeJsonParse(raw);
+
+  if (!response.ok) {
+    const detail =
+      payload && typeof payload.error === "string"
+        ? payload.error
+        : `No se pudo aplicar la revision (${response.status}).`;
+    throw new Error(detail);
+  }
+
+  if (!payload || typeof payload.updatedHtml !== "string") {
+    throw new Error("Respuesta invalida del backend IA.");
+  }
+
+  return payload;
+}
+
+async function tryBrowserDirectRevision({ instruction, html, history }) {
+  const apiKey = (localStorage.getItem(BROWSER_API_KEY_STORAGE) || "").trim();
+  if (!apiKey) return null;
+
+  const model = (localStorage.getItem(BROWSER_MODEL_STORAGE) || "gpt-4.1-mini").trim();
+  const prompts = buildAiPrompts({ instruction, html, history });
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: prompts.systemPrompt }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: prompts.userPrompt }],
+        },
+      ],
+    }),
+  });
+
+  const raw = await response.text();
+  const data = safeJsonParse(raw);
+
+  if (!response.ok) {
+    const errorMessage =
+      data?.error?.message || data?.error || `OpenAI fallo (${response.status}).`;
+    throw new Error(errorMessage);
+  }
+
+  const outputText = extractTextFromResponsesApi(data);
+  const parsed = parseJsonObjectLoose(outputText);
+  if (!parsed || typeof parsed.updated_html !== "string") {
+    throw new Error("No pude interpretar la respuesta IA en modo navegador.");
+  }
+
+  const updatedHtml = parsed.updated_html.trim();
+  const updatedText =
+    typeof parsed.updated_text === "string" && parsed.updated_text.trim()
+      ? parsed.updated_text.trim()
+      : htmlToText(updatedHtml);
+
+  return {
+    assistantReply: parsed.assistant_reply || "Cambios aplicados.",
+    updatedHtml,
+    updatedText,
+    model: `${model} (browser)`,
+  };
+}
+
+function buildAiPrompts({ instruction, html, history }) {
+  const cleanHistory = Array.isArray(history)
+    ? history
+        .filter((item) => item && typeof item.role === "string" && typeof item.text === "string")
+        .slice(-8)
+    : [];
+
+  const historyText =
+    cleanHistory.length === 0
+      ? "Sin historial previo."
+      : cleanHistory
+          .map((item, idx) => `${idx + 1}. ${item.role.toUpperCase()}: ${item.text}`)
+          .join("\n");
+
+  const systemPrompt = [
+    "Eres un experto en construir emails HTML precisos y claros.",
+    "Tu trabajo es editar el HTML completo segun la instruccion del usuario.",
+    "Reglas importantes:",
+    "1) Devuelve SIEMPRE un objeto JSON valido y nada mas.",
+    '2) El JSON debe tener: "assistant_reply", "updated_html", "updated_text".',
+    "3) updated_html debe ser un documento HTML completo listo para email.",
+    "4) Usa estructura compatible con email: tablas, estilos inline y layout robusto.",
+    "5) Mantente directo y funcional: sin relleno innecesario.",
+    "6) updated_text debe ser texto plano equivalente al email.",
+  ].join("\n");
+
+  const userPrompt = [
+    `INSTRUCCION DEL USUARIO: ${instruction}`,
+    "",
+    "HISTORIAL RECIENTE:",
+    historyText,
+    "",
+    "HTML ACTUAL:",
+    html,
+  ].join("\n");
+
+  return { systemPrompt, userPrompt };
+}
+
+function configureBrowserAiCredentials() {
+  const currentKey = localStorage.getItem(BROWSER_API_KEY_STORAGE) || "";
+  const nextKey = window.prompt(
+    "Pega tu OpenAI API key para usar IA en version publicada (opcional):",
+    currentKey
+  );
+
+  if (nextKey === null) return;
+  const cleanKey = nextKey.trim();
+
+  if (!cleanKey) {
+    localStorage.removeItem(BROWSER_API_KEY_STORAGE);
+    localStorage.removeItem(BROWSER_MODEL_STORAGE);
+    addMessage("assistant", "Clave API eliminada del navegador.");
+    return;
+  }
+
+  const currentModel = localStorage.getItem(BROWSER_MODEL_STORAGE) || "gpt-4.1-mini";
+  const nextModel = window.prompt("Modelo OpenAI para modo navegador:", currentModel);
+  if (nextModel === null) return;
+
+  localStorage.setItem(BROWSER_API_KEY_STORAGE, cleanKey);
+  localStorage.setItem(BROWSER_MODEL_STORAGE, nextModel.trim() || "gpt-4.1-mini");
+  addMessage("assistant", "API IA configurada para modo navegador.");
+}
+
+function extractTextFromResponsesApi(data) {
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
+  }
+
+  const chunks = [];
+  if (Array.isArray(data?.output)) {
+    for (const item of data.output) {
+      if (!Array.isArray(item?.content)) continue;
+      for (const part of item.content) {
+        if (typeof part?.text === "string") {
+          chunks.push(part.text);
+        }
+      }
+    }
+  }
+
+  return chunks.join("\n").trim();
+}
+
+function parseJsonObjectLoose(rawText) {
+  if (!rawText) return null;
+
+  const direct = safeJsonParse(rawText);
+  if (direct) return direct;
+
+  const fenced = rawText.match(/```json\s*([\s\S]*?)```/i);
+  if (fenced && fenced[1]) {
+    const parsedFence = safeJsonParse(fenced[1]);
+    if (parsedFence) return parsedFence;
+  }
+
+  const firstBrace = rawText.indexOf("{");
+  const lastBrace = rawText.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return safeJsonParse(rawText.slice(firstBrace, lastBrace + 1));
+  }
+
+  return null;
+}
+
+function safeJsonParse(raw) {
+  if (typeof raw !== "string") return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return null;
+  }
+}
+
+function isLocalHost() {
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
 function setBusy(value) {
   state.busy = value;
   sendBtn.disabled = value;
+  setApiKeyBtn.disabled = value;
   sendBtn.textContent = value ? "Aplicando cambios..." : "Aplicar cambio con IA";
 }
 
