@@ -246,6 +246,22 @@ body {
   color: var(--brand);
 }
 
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(102, 79, 56, 0.15);
+  background: #fffdf5;
+}
+
+.zoom-label {
+  min-width: 56px;
+  text-align: center;
+  font-weight: 700;
+  color: #564218;
+}
+
 .views,
 .actions {
   display: flex;
@@ -302,7 +318,8 @@ body {
 }
 
 .preview-pane {
-  background: #ffffff;
+  background: #eceff3;
+  border-top: 1px solid #e2e5ea;
   border-radius: 0 0 var(--radius) var(--radius);
 }
 

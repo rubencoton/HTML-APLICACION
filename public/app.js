@@ -3,7 +3,7 @@ const CHAT_STORAGE_KEY = "html-aplicacion-chat-v1";
 const BROWSER_API_KEY_STORAGE = "ha-browser-openai-key";
 const BROWSER_MODEL_STORAGE = "ha-browser-openai-model";
 const PREVIEW_HELP_TEXT =
-  "Vista previa interactiva: haz clic en texto, enlace o imagen para editar.";
+  "Vista previa interactiva: haz clic para editar y usa el zoom para ver el resultado con claridad.";
 const PREVIEW_STYLE_ID = "ha-preview-edit-style";
 
 const defaultEmailHtml = `<!doctype html>
@@ -59,12 +59,19 @@ const state = {
   currentView: "code",
   html: "",
   chatHistory: [],
+  previewZoom: 100,
 };
 
 const htmlEditor = document.getElementById("htmlEditor");
 const previewFrame = document.getElementById("previewFrame");
 const textOutput = document.getElementById("textOutput");
 const previewHint = document.getElementById("previewHint");
+const previewControls = document.getElementById("previewControls");
+const zoomOutBtn = document.getElementById("zoomOutBtn");
+const zoomInBtn = document.getElementById("zoomInBtn");
+const zoomResetBtn = document.getElementById("zoomResetBtn");
+const zoomLabel = document.getElementById("zoomLabel");
+const openPreviewBtn = document.getElementById("openPreviewBtn");
 const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
@@ -121,6 +128,7 @@ function wireEvents() {
 
   previewFrame.addEventListener("load", () => {
     enablePreviewEditing();
+    applyPreviewZoom();
   });
 
   chatForm.addEventListener("submit", async (event) => {
@@ -176,6 +184,22 @@ function wireEvents() {
 
   setApiKeyBtn.addEventListener("click", () => {
     configureBrowserAiCredentials();
+  });
+
+  zoomOutBtn.addEventListener("click", () => {
+    setPreviewZoom(state.previewZoom - 10);
+  });
+
+  zoomInBtn.addEventListener("click", () => {
+    setPreviewZoom(state.previewZoom + 10);
+  });
+
+  zoomResetBtn.addEventListener("click", () => {
+    setPreviewZoom(100);
+  });
+
+  openPreviewBtn.addEventListener("click", () => {
+    openCleanPreview();
   });
 }
 
@@ -463,6 +487,7 @@ function setView(view) {
   previewFrame.classList.toggle("hidden", !isPreview);
   textOutput.classList.toggle("hidden", !isText);
   previewHint.classList.toggle("hidden", !isPreview);
+  previewControls.classList.toggle("hidden", !isPreview);
 
   viewButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.getAttribute("data-view") === view);
@@ -470,6 +495,7 @@ function setView(view) {
 
   if (isPreview) {
     resetPreviewScroll();
+    applyPreviewZoom();
     setPreviewHint(PREVIEW_HELP_TEXT);
     enablePreviewEditing();
   }
@@ -486,6 +512,34 @@ function resetPreviewScroll() {
   try {
     frameWin.scrollTo(0, 0);
   } catch (_) {}
+}
+
+function setPreviewZoom(nextZoom) {
+  const normalized = Math.max(60, Math.min(160, Number(nextZoom) || 100));
+  state.previewZoom = normalized;
+  applyPreviewZoom();
+}
+
+function applyPreviewZoom() {
+  if (zoomLabel) {
+    zoomLabel.textContent = `${state.previewZoom}%`;
+  }
+
+  const frameDoc = previewFrame.contentDocument;
+  if (!frameDoc || !frameDoc.documentElement) return;
+
+  frameDoc.documentElement.style.zoom = `${state.previewZoom}%`;
+  resetPreviewScroll();
+}
+
+function openCleanPreview() {
+  const blob = new Blob([state.html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const popup = window.open(url, "_blank", "noopener,noreferrer");
+  if (!popup) {
+    addMessage("assistant", "El navegador bloqueo la pestaña. Permite popups para abrir vista limpia.");
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
 }
 
 function enablePreviewEditing() {
