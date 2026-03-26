@@ -218,7 +218,7 @@ body {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   min-height: 0;
   overflow: hidden;
 }
@@ -246,7 +246,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 4px 10px;
-  min-height: 34px;
+  min-height: 30px;
   border-bottom: 1px solid rgba(102, 79, 56, 0.15);
   background: #fffdf5;
 }
