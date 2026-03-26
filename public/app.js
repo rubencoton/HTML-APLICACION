@@ -1,5 +1,8 @@
 const STORAGE_KEY = "html-aplicacion-draft-v1";
 const CHAT_STORAGE_KEY = "html-aplicacion-chat-v1";
+const PREVIEW_HELP_TEXT =
+  "Vista previa interactiva: haz clic en texto, enlace o imagen para editar.";
+const PREVIEW_STYLE_ID = "ha-preview-edit-style";
 
 const defaultEmailHtml = `<!doctype html>
 <html lang="es">
@@ -59,6 +62,7 @@ const state = {
 const htmlEditor = document.getElementById("htmlEditor");
 const previewFrame = document.getElementById("previewFrame");
 const textOutput = document.getElementById("textOutput");
+const previewHint = document.getElementById("previewHint");
 const chatLog = document.getElementById("chatLog");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
@@ -110,6 +114,10 @@ function wireEvents() {
     state.html = htmlEditor.value;
     refreshOutputs();
     persistHtml();
+  });
+
+  previewFrame.addEventListener("load", () => {
+    enablePreviewEditing();
   });
 
   chatForm.addEventListener("submit", async (event) => {
@@ -226,15 +234,311 @@ function setView(view) {
   htmlEditor.classList.toggle("hidden", !isCode);
   previewFrame.classList.toggle("hidden", !isPreview);
   textOutput.classList.toggle("hidden", !isText);
+  previewHint.classList.toggle("hidden", !isPreview);
 
   viewButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.getAttribute("data-view") === view);
   });
+
+  if (isPreview) {
+    setPreviewHint(PREVIEW_HELP_TEXT);
+    enablePreviewEditing();
+  }
 }
 
 function refreshOutputs() {
   previewFrame.srcdoc = state.html;
   textOutput.value = htmlToText(state.html);
+}
+
+function enablePreviewEditing() {
+  const frameDoc = previewFrame.contentDocument;
+  if (!frameDoc || !frameDoc.body) return;
+
+  injectPreviewStyles(frameDoc);
+  if (frameDoc.body.dataset.haPreviewReady === "1") return;
+  frameDoc.body.dataset.haPreviewReady = "1";
+
+  frameDoc.addEventListener("click", onPreviewClick, true);
+  frameDoc.addEventListener("mouseover", onPreviewHover, true);
+}
+
+function onPreviewHover(event) {
+  if (state.currentView !== "preview") return;
+  const frameDoc = previewFrame.contentDocument;
+  if (!frameDoc) return;
+
+  const resolved = resolveEditableTarget(event.target, frameDoc);
+  clearPreviewHover(frameDoc);
+  if (!resolved) return;
+
+  if (!resolved.element.classList.contains("ha-preview-selected")) {
+    resolved.element.classList.add("ha-preview-hover");
+  }
+}
+
+function onPreviewClick(event) {
+  if (state.currentView !== "preview") return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (state.busy) {
+    setPreviewHint("La IA esta trabajando. Espera un momento para editar.");
+    return;
+  }
+
+  const frameDoc = previewFrame.contentDocument;
+  if (!frameDoc) return;
+
+  const resolved = resolveEditableTarget(event.target, frameDoc);
+  if (!resolved) {
+    setPreviewHint("Ese bloque no se puede editar en clic directo. Prueba sobre texto, enlace o imagen.");
+    return;
+  }
+
+  markPreviewSelection(frameDoc, resolved.element);
+  const editResult = editPreviewElement(resolved);
+  if (!editResult.changed) {
+    setPreviewHint("Edicion cancelada.");
+    return;
+  }
+
+  syncHtmlFromPreview(frameDoc);
+  setPreviewHint(editResult.hint);
+  addMessage("assistant", editResult.chatMessage);
+}
+
+function editPreviewElement(resolved) {
+  if (resolved.type === "image") {
+    return editImageElement(resolved.element);
+  }
+  if (resolved.type === "link") {
+    return editLinkElement(resolved.element);
+  }
+  return editTextElement(resolved.element);
+}
+
+function editTextElement(element) {
+  const currentText = normalizeText(element.textContent);
+  const nextText = window.prompt("Nuevo texto para este bloque:", currentText);
+  if (nextText === null) return { changed: false };
+
+  if (nextText === currentText) {
+    return { changed: false };
+  }
+
+  element.textContent = nextText;
+  return {
+    changed: true,
+    hint: "Texto actualizado desde la vista previa.",
+    chatMessage: "Texto actualizado desde la vista previa interactiva.",
+  };
+}
+
+function editLinkElement(element) {
+  const currentText = normalizeText(element.textContent);
+  const currentHref = element.getAttribute("href") || "";
+
+  const nextText = window.prompt("Nuevo texto del enlace:", currentText);
+  if (nextText === null) return { changed: false };
+
+  const nextHref = window.prompt("Nueva URL del enlace:", currentHref);
+  if (nextHref === null) return { changed: false };
+
+  if (nextText === currentText && nextHref.trim() === currentHref) {
+    return { changed: false };
+  }
+
+  element.textContent = nextText;
+  if (nextHref.trim()) {
+    element.setAttribute("href", nextHref.trim());
+  } else {
+    element.removeAttribute("href");
+  }
+
+  return {
+    changed: true,
+    hint: "Enlace actualizado desde la vista previa.",
+    chatMessage: "Enlace actualizado desde la vista previa interactiva.",
+  };
+}
+
+function editImageElement(element) {
+  const currentSrc = element.getAttribute("src") || "";
+  const currentAlt = element.getAttribute("alt") || "";
+
+  const nextSrc = window.prompt("Nueva URL de la imagen:", currentSrc);
+  if (nextSrc === null) return { changed: false };
+
+  const normalizedSrc = nextSrc.trim();
+  if (!normalizedSrc) {
+    setPreviewHint("La imagen necesita una URL valida.");
+    return { changed: false };
+  }
+
+  const nextAlt = window.prompt("Nuevo texto ALT (opcional):", currentAlt);
+  if (nextAlt === null) return { changed: false };
+
+  if (normalizedSrc === currentSrc && nextAlt.trim() === currentAlt) {
+    return { changed: false };
+  }
+
+  element.setAttribute("src", normalizedSrc);
+  element.setAttribute("alt", nextAlt.trim());
+
+  return {
+    changed: true,
+    hint: "Imagen actualizada desde la vista previa.",
+    chatMessage: "Imagen actualizada desde la vista previa interactiva.",
+  };
+}
+
+function resolveEditableTarget(target, frameDoc) {
+  if (!target || !(target instanceof frameDoc.defaultView.Element)) return null;
+
+  const image = target.closest("img");
+  if (image) return { type: "image", element: image };
+
+  const link = target.closest("a");
+  if (link) return { type: "link", element: link };
+
+  let node = target;
+  while (node && node !== frameDoc.body) {
+    if (isEditableTextElement(node, frameDoc)) {
+      return { type: "text", element: node };
+    }
+    node = node.parentElement;
+  }
+
+  if (!["HTML", "BODY"].includes(target.tagName)) {
+    const fallback = findEditableTextDescendant(target, frameDoc);
+    if (fallback) {
+      return { type: "text", element: fallback };
+    }
+  }
+
+  return null;
+}
+
+function isEditableTextElement(element, frameDoc) {
+  const blockedTags = new Set(["HTML", "BODY", "TABLE", "TBODY", "THEAD", "TFOOT", "TR"]);
+  if (blockedTags.has(element.tagName)) return false;
+  if (element.querySelector("img")) return false;
+
+  const normalized = normalizeText(element.textContent);
+  if (!normalized) return false;
+
+  if (element.children.length === 0) return true;
+  return hasDirectText(element, frameDoc);
+}
+
+function hasDirectText(element, frameDoc) {
+  for (const node of element.childNodes) {
+    if (node.nodeType === frameDoc.defaultView.Node.TEXT_NODE && normalizeText(node.textContent)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findEditableTextDescendant(root, frameDoc) {
+  if (!(root instanceof frameDoc.defaultView.Element)) return null;
+
+  const walker = frameDoc.createTreeWalker(
+    root,
+    frameDoc.defaultView.NodeFilter.SHOW_ELEMENT
+  );
+
+  let current = walker.nextNode();
+  while (current) {
+    if (isEditableTextElement(current, frameDoc)) return current;
+    current = walker.nextNode();
+  }
+  return null;
+}
+
+function markPreviewSelection(frameDoc, element) {
+  frameDoc.querySelectorAll(".ha-preview-selected").forEach((el) => {
+    el.classList.remove("ha-preview-selected");
+  });
+  clearPreviewHover(frameDoc);
+  element.classList.add("ha-preview-selected");
+}
+
+function clearPreviewHover(frameDoc) {
+  frameDoc.querySelectorAll(".ha-preview-hover").forEach((el) => {
+    el.classList.remove("ha-preview-hover");
+  });
+}
+
+function syncHtmlFromPreview(frameDoc) {
+  const cleanedHtml = serializePreviewDocument(frameDoc);
+  state.html = cleanedHtml;
+  htmlEditor.value = state.html;
+  textOutput.value = htmlToText(state.html);
+  persistHtml();
+}
+
+function serializePreviewDocument(frameDoc) {
+  const htmlClone = frameDoc.documentElement.cloneNode(true);
+  const styleNode = htmlClone.querySelector(`#${PREVIEW_STYLE_ID}`);
+  if (styleNode) styleNode.remove();
+
+  htmlClone.querySelectorAll(".ha-preview-selected").forEach((el) => {
+    el.classList.remove("ha-preview-selected");
+  });
+
+  htmlClone.querySelectorAll(".ha-preview-hover").forEach((el) => {
+    el.classList.remove("ha-preview-hover");
+  });
+
+  const doctype = buildDoctype(frameDoc.doctype);
+  return `${doctype}\n${htmlClone.outerHTML}`;
+}
+
+function buildDoctype(doctype) {
+  if (!doctype) return "<!doctype html>";
+  if (doctype.publicId) {
+    const systemPart = doctype.systemId ? ` "${doctype.systemId}"` : "";
+    return `<!DOCTYPE ${doctype.name} PUBLIC "${doctype.publicId}"${systemPart}>`;
+  }
+  if (doctype.systemId) {
+    return `<!DOCTYPE ${doctype.name} SYSTEM "${doctype.systemId}">`;
+  }
+  return `<!doctype ${doctype.name}>`;
+}
+
+function injectPreviewStyles(frameDoc) {
+  if (frameDoc.getElementById(PREVIEW_STYLE_ID)) return;
+  const style = frameDoc.createElement("style");
+  style.id = PREVIEW_STYLE_ID;
+  style.textContent = `
+    .ha-preview-hover {
+      outline: 1px dashed #1f6e5a !important;
+      outline-offset: 2px !important;
+      cursor: pointer !important;
+    }
+    .ha-preview-selected {
+      outline: 2px solid #cf6f36 !important;
+      outline-offset: 2px !important;
+      cursor: pointer !important;
+    }
+  `;
+  if (frameDoc.head) {
+    frameDoc.head.appendChild(style);
+  } else {
+    frameDoc.documentElement.prepend(style);
+  }
+}
+
+function setPreviewHint(text) {
+  if (!previewHint) return;
+  previewHint.textContent = text;
+}
+
+function normalizeText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function htmlToText(html) {

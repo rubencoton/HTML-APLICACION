@@ -224,6 +224,19 @@ body {
   background: linear-gradient(90deg, rgba(255, 245, 226, 0.8), rgba(242, 255, 248, 0.8));
 }
 
+.preview-hint {
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 0.82rem;
+  color: #5d5446;
+  background: #fff9ef;
+  border-bottom: 1px solid rgba(102, 79, 56, 0.15);
+}
+
+.preview-hint strong {
+  color: var(--brand);
+}
+
 .views,
 .actions {
   display: flex;
