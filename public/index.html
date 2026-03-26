@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTML APLICACION</title>
+    <meta
+      name="description"
+      content="Editor profesional de emails HTML con chat IA, preview en vivo y exportaciones."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape shape-a"></div>
+    <div class="bg-shape shape-b"></div>
+
+    <main class="layout">
+      <aside class="chat-panel">
+        <header class="brand">
+          <p class="kicker">Taller IA</p>
+          <h1>HTML APLICACION</h1>
+          <p class="subtitle">
+            Escribe cambios en lenguaje natural y aplica mejoras al email en segundos.
+          </p>
+        </header>
+
+        <div id="chatLog" class="chat-log" aria-live="polite"></div>
+
+        <div class="quick-actions">
+          <button class="chip" data-quick="Haz el texto mas corto y directo.">Texto directo</button>
+          <button class="chip" data-quick="Cambia la imagen principal por un estilo mas premium.">
+            Mejor foto
+          </button>
+          <button class="chip" data-quick="Usa un CTA mas fuerte para aumentar conversion.">
+            CTA potente
+          </button>
+        </div>
+
+        <form id="chatForm" class="chat-form">
+          <label for="chatInput">Que quieres cambiar</label>
+          <textarea
+            id="chatInput"
+            name="chatInput"
+            rows="4"
+            placeholder="Ejemplo: Cambia el titulo y añade una seccion de testimonios."
+            required
+          ></textarea>
+          <button id="sendBtn" type="submit">Aplicar cambio con IA</button>
+        </form>
+      </aside>
+
+      <section class="workspace">
+        <header class="toolbar">
+          <div class="views">
+            <button class="view-btn active" data-view="code" id="codeViewBtn">Codigo HTML</button>
+            <button class="view-btn" data-view="preview" id="previewViewBtn">Vista previa</button>
+            <button class="view-btn" data-view="text" id="textViewBtn">Texto plano</button>
+          </div>
+
+          <div class="actions">
+            <button id="newDraftBtn" class="action">Nuevo borrador</button>
+            <button id="copyBtn" class="action">Copiar HTML</button>
+            <button id="exportHtmlBtn" class="action">Exportar HTML</button>
+            <button id="exportTxtBtn" class="action">Exportar TXT</button>
+          </div>
+        </header>
+
+        <div class="pane-wrap">
+          <textarea id="htmlEditor" class="pane code-pane" spellcheck="false"></textarea>
+          <iframe
+            id="previewFrame"
+            class="pane preview-pane hidden"
+            title="Vista previa del email"
+            sandbox="allow-same-origin"
+          ></iframe>
+          <textarea id="textOutput" class="pane text-pane hidden" readonly></textarea>
+        </div>
+      </section>
+    </main>
+
+    <template id="messageTemplate">
+      <article class="chat-item">
+        <p class="role"></p>
+        <p class="text"></p>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
