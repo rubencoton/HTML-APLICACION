@@ -27,25 +27,37 @@ Incluye:
 ## Requisitos
 
 - Node.js 20 o superior.
-- API key de OpenAI.
+- Ollama (recomendado para IA open source gratis).
+- API key de OpenAI (opcional, solo como fallback).
+
+## IA Open Source Gratis (recomendado)
+
+1. Ejecuta:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\setup-oss-ai.ps1
+   ```
+
+2. Crea `C:\Users\elrub\Desktop\CAPETA CODEX\HTML-APLICACION\.env` con:
+
+   ```env
+   PORT=8787
+   AI_PROVIDER=auto
+   OLLAMA_BASE_URL=http://127.0.0.1:11434
+   OLLAMA_MODEL=qwen3:8b
+   OPENAI_API_KEY=
+   OPENAI_MODEL=gpt-4.1-mini
+   ```
 
 ## Arranque local
 
-1. Crea `C:\Users\elrub\Desktop\CAPETA CODEX\HTML-APLICACION\.env` con:
-
-   ```env
-   OPENAI_API_KEY=tu_api_key
-   OPENAI_MODEL=gpt-4.1-mini
-   PORT=8787
-   ```
-
-2. Inicia el servidor:
+1. Inicia el servidor:
 
    ```powershell
    node server.js
    ```
 
-3. Abre:
+2. Abre:
 
    [http://localhost:8787](http://localhost:8787)
 

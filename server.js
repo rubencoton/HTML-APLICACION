@@ -12,6 +12,11 @@ loadEnvFile(ENV_PATH);
 const PORT = Number(process.env.PORT || 8787);
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || "gpt-4.1-mini").trim();
+const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434")
+  .trim()
+  .replace(/\/+$/, "");
+const OLLAMA_MODEL = (process.env.OLLAMA_MODEL || "qwen3:8b").trim();
+const AI_PROVIDER = normalizeProvider(process.env.AI_PROVIDER);
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -32,11 +37,8 @@ const server = http.createServer(async (req, res) => {
     const pathname = decodeURIComponent(requestUrl.pathname);
 
     if (req.method === "GET" && pathname === "/api/health") {
-      return sendJson(res, 200, {
-        ok: true,
-        message: "Servidor activo",
-        model: OPENAI_MODEL,
-      });
+      const status = await detectRuntimeStatus();
+      return sendJson(res, 200, status);
     }
 
     if (req.method === "POST" && pathname === "/api/ai/revise") {
@@ -46,26 +48,17 @@ const server = http.createServer(async (req, res) => {
       const history = Array.isArray(body.history) ? body.history : [];
 
       if (!instruction) {
-        return sendJson(res, 400, { error: "Falta instruction." });
+        throw new UserFacingError("Falta instruction.");
       }
 
       if (!html) {
-        return sendJson(res, 400, { error: "Falta html." });
-      }
-
-      if (!OPENAI_API_KEY) {
-        return sendJson(res, 400, {
-          error:
-            "No hay OPENAI_API_KEY. Crea .env en la raiz del proyecto con OPENAI_API_KEY=tu_clave.",
-        });
+        throw new UserFacingError("Falta html.");
       }
 
       const revision = await reviseHtmlWithAi({
         html,
         instruction,
         history,
-        model: OPENAI_MODEL,
-        apiKey: OPENAI_API_KEY,
       });
 
       return sendJson(res, 200, revision);
@@ -77,10 +70,12 @@ const server = http.createServer(async (req, res) => {
 
     sendJson(res, 404, { error: "Ruta no encontrada." });
   } catch (error) {
-    sendJson(res, 500, {
-      error: "Error interno en el servidor.",
-      detail: error.message,
-    });
+    const statusCode = error instanceof UserFacingError ? error.status : 500;
+    const payload = { error: error.message || "Error interno en el servidor." };
+    if (statusCode === 500) {
+      payload.detail = error.message;
+    }
+    sendJson(res, statusCode, payload);
   }
 });
 
@@ -88,7 +83,191 @@ server.listen(PORT, () => {
   console.log(`HTML APLICACION disponible en http://localhost:${PORT}`);
 });
 
-async function reviseHtmlWithAi({ html, instruction, history, model, apiKey }) {
+async function detectRuntimeStatus() {
+  const ollamaAvailable = await isOllamaAvailable();
+  const openaiAvailable = Boolean(OPENAI_API_KEY);
+
+  return {
+    ok: true,
+    message: "Servidor activo",
+    providerConfig: AI_PROVIDER,
+    activeProvider: chooseProvider({
+      configProvider: AI_PROVIDER,
+      ollamaAvailable,
+      openaiAvailable,
+    }),
+    openaiAvailable,
+    ollamaAvailable,
+    models: {
+      openai: OPENAI_MODEL,
+      ollama: OLLAMA_MODEL,
+    },
+  };
+}
+
+async function reviseHtmlWithAi({ html, instruction, history }) {
+  const prompts = buildAiPrompts({ html, instruction, history });
+  const ollamaAvailable = await isOllamaAvailable();
+  const openaiAvailable = Boolean(OPENAI_API_KEY);
+
+  const provider = chooseProvider({
+    configProvider: AI_PROVIDER,
+    ollamaAvailable,
+    openaiAvailable,
+  });
+
+  if (!provider) {
+    throw new UserFacingError(
+      [
+        "No hay IA disponible.",
+        "Opcion recomendada (gratis y open source): instala Ollama y ejecuta:",
+        `1) ollama pull ${OLLAMA_MODEL}`,
+        "2) vuelve a ejecutar node server.js",
+        "Alternativa: configurar OPENAI_API_KEY en .env",
+      ].join(" "),
+      400
+    );
+  }
+
+  if (provider === "ollama") {
+    return reviseHtmlWithOllama(prompts);
+  }
+
+  return reviseHtmlWithOpenAi(prompts);
+}
+
+function chooseProvider({ configProvider, ollamaAvailable, openaiAvailable }) {
+  if (configProvider === "ollama") {
+    return ollamaAvailable ? "ollama" : null;
+  }
+
+  if (configProvider === "openai") {
+    return openaiAvailable ? "openai" : null;
+  }
+
+  if (ollamaAvailable) return "ollama";
+  if (openaiAvailable) return "openai";
+  return null;
+}
+
+async function reviseHtmlWithOllama(prompts) {
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      stream: false,
+      format: "json",
+      think: false,
+      messages: [
+        { role: "system", content: prompts.systemPrompt },
+        { role: "user", content: prompts.userPrompt },
+      ],
+    }),
+  });
+
+  const raw = await response.text();
+  const data = parseJsonSafe(raw);
+
+  if (!response.ok) {
+    const modelHint =
+      raw.toLowerCase().includes("model") && raw.toLowerCase().includes("not found")
+        ? ` Ejecuta: ollama pull ${OLLAMA_MODEL}`
+        : "";
+    throw new UserFacingError(
+      `Ollama fallo (${response.status}). ${raw || "Sin detalle."}${modelHint}`,
+      502
+    );
+  }
+
+  const rawText = String(data?.message?.content || data?.response || "").trim();
+  const parsed = parseJsonObject(rawText);
+
+  if (
+    !parsed ||
+    typeof parsed.assistant_reply !== "string" ||
+    typeof parsed.updated_html !== "string"
+  ) {
+    throw new UserFacingError("No se pudo interpretar la respuesta de Ollama.", 502);
+  }
+
+  const updatedHtml = parsed.updated_html.trim();
+  const updatedText =
+    typeof parsed.updated_text === "string" && parsed.updated_text.trim()
+      ? parsed.updated_text.trim()
+      : htmlToText(updatedHtml);
+
+  return {
+    assistantReply: parsed.assistant_reply.trim() || "Cambios aplicados.",
+    updatedHtml,
+    updatedText,
+    model: `ollama:${OLLAMA_MODEL}`,
+  };
+}
+
+async function reviseHtmlWithOpenAi(prompts) {
+  if (!OPENAI_API_KEY) {
+    throw new UserFacingError(
+      "OPENAI_API_KEY no configurada. Usa AI_PROVIDER=ollama o define la clave.",
+      400
+    );
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: prompts.systemPrompt }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: prompts.userPrompt }],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const failText = await response.text();
+    throw new UserFacingError(`OpenAI API fallo (${response.status}): ${failText}`, 502);
+  }
+
+  const data = await response.json();
+  const rawText = extractTextFromResponse(data);
+  const parsed = parseJsonObject(rawText);
+
+  if (
+    !parsed ||
+    typeof parsed.assistant_reply !== "string" ||
+    typeof parsed.updated_html !== "string"
+  ) {
+    throw new UserFacingError("No se pudo interpretar la respuesta de OpenAI.", 502);
+  }
+
+  const updatedHtml = parsed.updated_html.trim();
+  const updatedText =
+    typeof parsed.updated_text === "string" && parsed.updated_text.trim()
+      ? parsed.updated_text.trim()
+      : htmlToText(updatedHtml);
+
+  return {
+    assistantReply: parsed.assistant_reply.trim() || "Cambios aplicados.",
+    updatedHtml,
+    updatedText,
+    model: OPENAI_MODEL,
+  };
+}
+
+function buildAiPrompts({ html, instruction, history }) {
   const cleanHistory = history
     .filter((item) => item && typeof item.role === "string" && typeof item.text === "string")
     .slice(-8);
@@ -122,56 +301,22 @@ async function reviseHtmlWithAi({ html, instruction, history, model, apiKey }) {
     html,
   ].join("\n");
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: systemPrompt }],
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: userPrompt }],
-        },
-      ],
-    }),
-  });
+  return { systemPrompt, userPrompt };
+}
 
-  if (!response.ok) {
-    const failText = await response.text();
-    throw new Error(`OpenAI API fallo (${response.status}): ${failText}`);
+async function isOllamaAvailable() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1200);
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return response.ok;
+  } catch (_) {
+    return false;
   }
-
-  const data = await response.json();
-  const rawText = extractTextFromResponse(data);
-  const parsed = parseJsonObject(rawText);
-
-  if (
-    !parsed ||
-    typeof parsed.assistant_reply !== "string" ||
-    typeof parsed.updated_html !== "string"
-  ) {
-    throw new Error("No se pudo interpretar la respuesta de IA.");
-  }
-
-  const updatedHtml = parsed.updated_html.trim();
-  const updatedText =
-    typeof parsed.updated_text === "string" && parsed.updated_text.trim()
-      ? parsed.updated_text.trim()
-      : htmlToText(updatedHtml);
-
-  return {
-    assistantReply: parsed.assistant_reply.trim() || "Cambios aplicados.",
-    updatedHtml,
-    updatedText,
-    model,
-  };
 }
 
 function extractTextFromResponse(data) {
@@ -220,6 +365,14 @@ function parseJsonObject(rawText) {
   }
 
   return null;
+}
+
+function parseJsonSafe(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    return {};
+  }
 }
 
 function htmlToText(html) {
@@ -287,7 +440,7 @@ function readJsonBody(req, maxBytes) {
       if (!data.trim()) return resolve({});
       try {
         resolve(JSON.parse(data));
-      } catch (error) {
+      } catch (_) {
         reject(new Error("JSON invalido en body."));
       }
     });
@@ -315,8 +468,24 @@ function loadEnvFile(filePath) {
     ) {
       value = value.slice(1, -1);
     }
+
     if (!process.env[key]) {
       process.env[key] = value;
     }
+  }
+}
+
+function normalizeProvider(rawProvider) {
+  const value = String(rawProvider || "auto").trim().toLowerCase();
+  if (value === "auto" || value === "ollama" || value === "openai") {
+    return value;
+  }
+  return "auto";
+}
+
+class UserFacingError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
   }
 }
