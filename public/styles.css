@@ -1,13 +1,13 @@
 :root {
-  --bg: #f5efe5;
-  --bg-soft: #fdf9f2;
-  --ink: #1f1d1a;
-  --ink-soft: #4f4a42;
-  --line: #d7cec0;
-  --brand: #1f6e5a;
-  --brand-2: #cf6f36;
-  --card: rgba(255, 252, 246, 0.86);
-  --shadow: 0 18px 50px rgba(36, 24, 9, 0.14);
+  --bg: #fff7ec;
+  --bg-soft: #ffffff;
+  --ink: #1f1f1f;
+  --ink-soft: #575757;
+  --line: #f0d78a;
+  --brand: #bf1e2e;
+  --brand-2: #f4b400;
+  --card: rgba(255, 255, 255, 0.92);
+  --shadow: 0 18px 50px rgba(130, 14, 25, 0.14);
   --radius: 18px;
 }
 
@@ -26,8 +26,8 @@ body {
 body {
   font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
   color: var(--ink);
-  background: radial-gradient(circle at 15% 10%, #fbf2dc, transparent 40%),
-    radial-gradient(circle at 80% 85%, #f4d7bc, transparent 42%), var(--bg);
+  background: radial-gradient(circle at 15% 10%, #ffe7a8, transparent 40%),
+    radial-gradient(circle at 80% 85%, #ffccd2, transparent 42%), var(--bg);
   overflow: hidden;
 }
 
@@ -44,7 +44,7 @@ body {
   left: -60px;
   top: 6%;
   border-radius: 65% 35% 58% 42%;
-  background: #d8f7ea;
+  background: #ffd54f;
 }
 
 .shape-b {
@@ -53,7 +53,7 @@ body {
   right: -90px;
   bottom: -120px;
   border-radius: 38% 62% 42% 58%;
-  background: #ffd8c2;
+  background: #d93645;
 }
 
 .layout {
@@ -87,6 +87,7 @@ body {
   font-family: "Sora", "Space Grotesk", sans-serif;
   font-size: 1.55rem;
   letter-spacing: 0.02em;
+  color: var(--brand);
 }
 
 .kicker {
@@ -103,6 +104,14 @@ body {
   color: var(--ink-soft);
   font-size: 0.92rem;
   line-height: 1.45;
+}
+
+.byline {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .chat-log {
@@ -124,11 +133,11 @@ body {
 }
 
 .chat-item[data-role="assistant"] {
-  background: #eefcf5;
+  background: #fff6d8;
 }
 
 .chat-item[data-role="user"] {
-  background: #fff7e9;
+  background: #ffe7ea;
 }
 
 .chat-item .role {
@@ -199,7 +208,7 @@ body {
   font-size: 0.92rem;
   cursor: pointer;
   color: #fff;
-  background: linear-gradient(130deg, var(--brand), #2e8b72);
+  background: linear-gradient(130deg, #bf1e2e, #911524);
 }
 
 #sendBtn:disabled {
@@ -221,15 +230,15 @@ body {
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid rgba(102, 79, 56, 0.2);
-  background: linear-gradient(90deg, rgba(255, 245, 226, 0.8), rgba(242, 255, 248, 0.8));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(255, 238, 180, 0.82));
 }
 
 .preview-hint {
   margin: 0;
   padding: 9px 14px;
   font-size: 0.82rem;
-  color: #5d5446;
-  background: #fff9ef;
+  color: #694f19;
+  background: #fff4cc;
   border-bottom: 1px solid rgba(102, 79, 56, 0.15);
 }
 
@@ -257,8 +266,8 @@ body {
 }
 
 .view-btn.active {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--brand);
+  border-color: var(--brand);
   color: #fff;
 }
 

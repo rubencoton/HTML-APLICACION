@@ -2,6 +2,10 @@
 
 Aplicacion web local para crear y editar emails HTML con un chat IA en lenguaje natural.
 
+Proyecto corporativo para **ARTES BUHO**.
+Desarrollador: **RUBEN COTON**.
+Paleta corporativa aplicada: **rojo, amarillo y blanco**.
+
 Incluye:
 
 - Chat IA para pedir cambios directos sobre el email.

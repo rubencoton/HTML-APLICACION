@@ -9,16 +9,16 @@ const defaultEmailHtml = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Oferta Especial</title>
+    <title>Artes Buho | Campana Especial</title>
   </head>
-  <body style="margin:0;padding:0;background:#f7f6f2;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f7f6f2;padding:24px 0;">
+  <body style="margin:0;padding:0;background:#fff7ec;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#fff7ec;padding:24px 0;">
       <tr>
         <td align="center">
           <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:640px;max-width:640px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;">
             <tr>
-              <td style="padding:28px 34px 14px 34px;background:#162436;color:#ffffff;">
-                <p style="margin:0;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.86;">HTML APLICACION</p>
+              <td style="padding:28px 34px 14px 34px;background:#bf1e2e;color:#ffffff;">
+                <p style="margin:0;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.92;">ARTES BUHO | HTML APLICACION</p>
                 <h1 style="margin:10px 0 0;font-size:30px;line-height:1.2;font-weight:700;">Lanza tu proxima campana en minutos</h1>
               </td>
             </tr>
@@ -31,7 +31,7 @@ const defaultEmailHtml = `<!doctype html>
                   Todo queda listo para exportar en HTML y texto plano, sin rodeos.
                 </p>
                 <p style="margin:0;">
-                  <a href="https://example.com" style="display:inline-block;background:#007a5c;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:700;">Quiero mi email ahora</a>
+                  <a href="https://example.com" style="display:inline-block;background:#f4b400;color:#1f1f1f;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:700;">Quiero mi email ahora</a>
                 </p>
               </td>
             </tr>
@@ -41,8 +41,8 @@ const defaultEmailHtml = `<!doctype html>
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 34px 30px 34px;border-top:1px solid #e8edf2;color:#5d6772;font-size:13px;line-height:1.6;">
-                Recibes este email porque solicitaste informacion sobre nuestras soluciones web.
+              <td style="padding:18px 34px 30px 34px;border-top:1px solid #ffe1a0;color:#5d6772;font-size:13px;line-height:1.6;">
+                Recibes este email porque solicitaste informacion de ARTES BUHO. Desarrollo: RUBEN COTON.
               </td>
             </tr>
           </table>
@@ -99,7 +99,7 @@ function init() {
   if (state.chatHistory.length === 0) {
     state.chatHistory.push({
       role: "assistant",
-      text: "Listo para editar. Escribe una instruccion y aplico cambios en tu HTML.",
+      text: "Listo para ARTES BUHO. Escribe una instruccion y aplico cambios en tu HTML.",
     });
     persistChat();
   }
@@ -515,12 +515,12 @@ function injectPreviewStyles(frameDoc) {
   style.id = PREVIEW_STYLE_ID;
   style.textContent = `
     .ha-preview-hover {
-      outline: 1px dashed #1f6e5a !important;
+      outline: 1px dashed #f4b400 !important;
       outline-offset: 2px !important;
       cursor: pointer !important;
     }
     .ha-preview-selected {
-      outline: 2px solid #cf6f36 !important;
+      outline: 2px solid #bf1e2e !important;
       outline-offset: 2px !important;
       cursor: pointer !important;
     }
