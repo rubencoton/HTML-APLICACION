@@ -469,6 +469,7 @@ function setView(view) {
   });
 
   if (isPreview) {
+    resetPreviewScroll();
     setPreviewHint(PREVIEW_HELP_TEXT);
     enablePreviewEditing();
   }
@@ -477,6 +478,14 @@ function setView(view) {
 function refreshOutputs() {
   previewFrame.srcdoc = state.html;
   textOutput.value = htmlToText(state.html);
+}
+
+function resetPreviewScroll() {
+  const frameWin = previewFrame.contentWindow;
+  if (!frameWin) return;
+  try {
+    frameWin.scrollTo(0, 0);
+  } catch (_) {}
 }
 
 function enablePreviewEditing() {
